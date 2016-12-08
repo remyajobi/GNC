@@ -16,119 +16,161 @@ namespace GNCService
     {
         public static string destinationTbName = string.Empty;
         public static string destinationTbAsSubBeat = string.Empty;
-        public List<int> IdsOfJournalists = new List<int>();
-        public static List<int> IdsOfSubBeats = new List<int>();
-      
+        public static int NoOfRowCopied = 0;
+       
+        /// <summary>
+        /// 
+        /// </summary>
         public DataAccess()
         {
-            //
-            // TODO: Add constructor logic here
-            //
-
-
-        }
-
-
-        public static SqlConnection objsqlConnection = new SqlConnection();
-
-
-        public void setSqlconnectionstring(string strConnectionstring)   //accept connctnstrng
-        {
-            objsqlConnection.ConnectionString = strConnectionstring;
-        }
-
-        //Query Execution
-
-        public bool sqlExecute(DataTable Dttable, string Servertable)
-        {
-            try
-            {
-                objsqlConnection.Open();
-
-
-
-                // take note of SqlBulkCopyOptions.KeepIdentity , you may or may not want to use this for your situation.  
-
-                using (var bulkCopy = new SqlBulkCopy(objsqlConnection.ConnectionString, SqlBulkCopyOptions.KeepNulls & SqlBulkCopyOptions.KeepIdentity))
-                {
-
-                    bulkCopy.ColumnMappings.Clear();
-                    bulkCopy.BatchSize = Dttable.Rows.Count;
-                    // my DataTable column names match my SQL Column names, so I simply made this loop. However if your column names don't match, just pass in which datatable name matches the SQL column name in Column Mappings
-                    foreach (DataColumn col in Dttable.Columns)
-                    {
-                        bulkCopy.ColumnMappings.Add(col.ColumnName, col.ColumnName);
-                    }
-
-                    bulkCopy.BulkCopyTimeout = 600;
-                    bulkCopy.DestinationTableName = Servertable;
-                    destinationTbName = Servertable;
-                    bulkCopy.SqlRowsCopied +=
-                      new SqlRowsCopiedEventHandler(OnSqlRowsTransfer);
-                    bulkCopy.NotifyAfter = 1;
-                    bulkCopy.WriteToServer(Dttable);
-                  
-                    return true;
-                }
-
-            }
-            catch (Exception)
-            {
-                return false;
-            }
-            finally
-            {
-                objsqlConnection.Close();
-            }
-
            
         }
 
-        private static void OnSqlRowsTransfer(object sender,
-         SqlRowsCopiedEventArgs e)
+        /// <summary>
+        /// 
+        /// </summary>
+        public static SqlConnection objsqlConnection = new SqlConnection();
+      
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="strConnectionstring"></param>
+        public void setSqlconnectionstring(string strConnectionstring) 
         {
-           // Console.WriteLine("Copied {0} so far...", e.RowsCopied);
+            try
+            {
+                objsqlConnection.ConnectionString = strConnectionstring;
+            }
+            catch (Exception ex)
+            {
+                Library.CrawlerEventErrorLog("DB Connection Error : " + objsqlConnection.ConnectionString + " : " + ex.InnerException.ToString());
 
-            int id = Library.GetIdsOfInsertedRecord(destinationTbName);
-           int NoOfRowCopied =Convert.ToInt32( e.RowsCopied);
-
-           for (int i = id; i >id-NoOfRowCopied; i--)
-           {
-               DataAccess objDataAccess = new DataAccess(); 
-               objDataAccess.IdsOfJournalists.Add(i);
-           }
-
+            }
         }
 
-        public bool sqlExecuteSubBeat(DataTable Dttable, string Servertable)
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="Dttable"></param>
+        /// <param name="Servertable"></param>
+        /// <returns></returns>
+        public bool sqlExecute(DataTable Dttable, string Servertable, string[] MappingColumns)
         {
             try
             {
                 objsqlConnection.Open();
-
-
-
+                
                 // take note of SqlBulkCopyOptions.KeepIdentity , you may or may not want to use this for your situation.  
-
-                using (var bulkCopy = new SqlBulkCopy(objsqlConnection.ConnectionString, SqlBulkCopyOptions.KeepIdentity))
+                using (var bulkCopy = new SqlBulkCopy(objsqlConnection.ConnectionString, SqlBulkCopyOptions.KeepNulls & SqlBulkCopyOptions.KeepIdentity))
                 {
-
-                    bulkCopy.ColumnMappings.Clear();
-                    bulkCopy.BatchSize = Dttable.Rows.Count;
-                    // my DataTable column names match my SQL Column names, so I simply made this loop. However if your column names don't match, just pass in which datatable name matches the SQL column name in Column Mappings
-                    foreach (DataColumn col in Dttable.Columns)
+                    try
                     {
-                        bulkCopy.ColumnMappings.Add(col.ColumnName, col.ColumnName);
+                        bulkCopy.ColumnMappings.Clear();
+                        bulkCopy.BatchSize = Dttable.Rows.Count;
+                        // my DataTable column names match my SQL Column names, so I simply made this loop. 
+                        //However if your column names don't match, just pass in which datatable name matches the SQL column name in Column Mappings
+                        foreach (string  column in MappingColumns)
+                        {
+                            bulkCopy.ColumnMappings.Add(column, column);
+                        }
+                   
+                        bulkCopy.BulkCopyTimeout = 600;
+                        bulkCopy.DestinationTableName = Servertable;
+                        destinationTbName = Servertable;
+
+                        bulkCopy.SqlRowsCopied +=
+                                      new SqlRowsCopiedEventHandler(OnSqlRowsTransfer);
+
+                        bulkCopy.NotifyAfter = Dttable.Rows.Count;
+                        bulkCopy.WriteToServer(Dttable);
+                        Library.CrawlerEventInfoLog("Bulk copy " + Dttable.Rows.Count);
                     }
+                    catch (Exception ex)
+                    {
+                        Library.CrawlerEventErrorLog("Bulk copying failed. " + ex.InnerException.ToString());
+                        return false;
+                    }
+                    return true;
+                }
 
-                    bulkCopy.BulkCopyTimeout = 600;
-                    bulkCopy.DestinationTableName = Servertable;
+            }
+            catch (Exception ex)
+            {
+                Library.CrawlerEventErrorLog("Bulk copying failed. " + ex.InnerException.ToString());
+                return false;
+            }
+            finally
+            {
+                objsqlConnection.Close();
+            }
+           
+        }
 
-                    bulkCopy.SqlRowsCopied +=
-                      new SqlRowsCopiedEventHandler(OnSqlRowsTransfer);
-                    bulkCopy.NotifyAfter =1;
-                    bulkCopy.WriteToServer(Dttable);
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private static void OnSqlRowsTransfer(object sender, SqlRowsCopiedEventArgs e)
+        {
+            DataAccess.NoOfRowCopied = 0;
+            try
+            {
+                DataAccess.NoOfRowCopied = Convert.ToInt32(e.RowsCopied);
+                Library.CrawlerEventInfoLog("RowCopied event " + DataAccess.NoOfRowCopied);
+            }
+            catch (Exception ex)
+            {
+                Library.CrawlerEventErrorLog("Bulk copying failed. " + ex.InnerException.ToString());
+            }
+        }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="tbname"></param>
+        /// <param name="query"></param>
+        /// <returns></returns>
+        public DataSet getdata(string tbname, string query)
+        {
+            DataSet objDataSet = new DataSet();
+            try
+            {
+                using (SqlDataAdapter objsqlDataAdapter = new SqlDataAdapter())
+                {
+                    using (objsqlDataAdapter.SelectCommand = new SqlCommand(query, objsqlConnection))
+                    {   
+                        if (!string.IsNullOrEmpty(tbname))
+                        {
+                            objDataSet.Tables.Add(tbname);
+                            objsqlDataAdapter.Fill(objDataSet.Tables[tbname]);
+                        }
+                        else
+                        {
+                            objsqlDataAdapter.Fill(objDataSet);
+                        }
+                        //return objDataSet;
+
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Library.CrawlerEventErrorLog("DB Error : " + objsqlConnection.ConnectionString + " : " + ex.InnerException.ToString());
+                
+            }
+            return objDataSet;
+        }
+
+        public bool insert(string qry)
+        {
+            try
+            {
+                objsqlConnection.Open();
+                using (SqlCommand objsqlcommand = new SqlCommand(qry, objsqlConnection))
+                {
+                    objsqlcommand.ExecuteNonQuery();
+                    objsqlConnection.Close();
                     return true;
                 }
 
@@ -140,31 +182,6 @@ namespace GNCService
             finally
             {
                 objsqlConnection.Close();
-            }
-
-
-        }
-
-        //Reading
-        public DataSet getdata(string tbname, string query)
-        {
-            using (SqlDataAdapter objsqlDataAdapter = new SqlDataAdapter())
-            {
-                using (objsqlDataAdapter.SelectCommand = new SqlCommand(query, objsqlConnection))
-                {
-                    DataSet objDataSet = new DataSet();
-                    if (!string.IsNullOrEmpty(tbname))
-                    {
-                        objDataSet.Tables.Add(tbname);
-                        objsqlDataAdapter.Fill(objDataSet.Tables[tbname]);
-                    }
-                    else
-                    {
-                        objsqlDataAdapter.Fill(objDataSet);
-                    }
-                    return objDataSet;
-
-                }
             }
         }
 

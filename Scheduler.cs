@@ -18,15 +18,15 @@ namespace GNCService
 {
     public partial class Scheduler : ServiceBase
     {
-        Thread _thread;
+        Thread thread;
         AutoResetEvent StopRequest = new AutoResetEvent(false);
-      /// <summary>
-      /// 
-      /// </summary>
+
+        /// <summary>
+        /// 
+        /// </summary>
         public Scheduler()
         {
             InitializeComponent();
-          
         }
 
         /// <summary>
@@ -35,52 +35,51 @@ namespace GNCService
         /// <param name="args"></param>
         protected override void OnStart(string[] args)
         {
-            System.Diagnostics.Debugger.Launch();
-            // Start the crawler thread
-            _thread = new Thread(DoWork);
-            _thread.Start();
-
+            //System.Diagnostics.Debugger.Launch();
+          
+            Library.CrawlerEventInfoLog("GNC Service started. ");
+            thread = new Thread(DoWork);
+            thread.Start();
         }
 
         /// <summary>
         /// 
         /// </summary>
         protected override void OnStop()
-        {
+        { 
             KillTheThread();
-            // Signal worker to stop and wait until it does
-            //StopRequest.Set(); 
-            //_thread.Join();
+            Library.CrawlerEventInfoLog("GNC Service stopped. ");
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="arg"></param>
         public void DoWork(object arg)
         {
-
+            CrawlingProcess:
             try
             {
-
+                
                 while (true)
                 {
-                    Console.WriteLine("task started");
-                    // First, execute scheduled task
                     Library.Crawler();
-
-                    // Then, wait for certain time interval, in this case 1 hour
-                    Console.WriteLine("task completed.");
-                    System.Threading.Thread.Sleep(TimeSpan.FromSeconds(10));
+                    Library.CrawlerEventInfoLog("Crawling paused for 10 sec. ");
+                    System.Threading.Thread.Sleep(TimeSpan.FromSeconds(10)); // Then, wait for certain time interval, in this case 10 sec
                 }
             }
-            catch (Exception)
-            { }
+            catch (Exception ex)
+            {
+                Library.CrawlerEventErrorLog("Crawling failed. " + ex.InnerException);
+                goto CrawlingProcess;
+            }
         
         }
 
         [SecurityPermissionAttribute(SecurityAction.Demand, ControlThread = true)]
         private void KillTheThread()
         {
-            _thread.Abort();
+            thread.Abort();
         }
     }
-
-
 }
